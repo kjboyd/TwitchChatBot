@@ -17,6 +17,7 @@ type ITwitchClient interface {
 	JoinChannel(channel string) error
 	SendPong() error
 	ReadLine() (string, error)
+	WriteMessage(message string, channel string, messageType string, user string) error
 }
 
 type TwitchClient struct {
@@ -41,11 +42,6 @@ func (this *TwitchClient) ConnectToIrcServer() error {
 	}
 	this.Logger.Log("Successfully connected to Twitch IRC")
 
-	_, err = this.connection.Write([]byte("JOIN #" + "magiccardbot" + "\r\n"))
-	if err != nil {
-		this.Logger.Log("Error joining channel: " + "magiccardbot")
-	}
-
 	this.reader = textproto.NewReader(bufio.NewReader(this.connection))
 	return nil
 }
@@ -63,6 +59,12 @@ func (this *TwitchClient) Authenticate(userName string, oauthToken string) error
 		return err
 	}
 
+	_, err = this.connection.Write([]byte("CAP REQ :twitch.tv/commands\r\n"))
+	if err != nil {
+		this.Logger.Log("Error requesting commands")
+		return err
+	}
+
 	this.Logger.Log("Successfully authenticated with user: " + userName)
 	return nil
 }
@@ -74,12 +76,6 @@ func (this *TwitchClient) JoinChannel(channel string) error {
 	}
 
 	this.Logger.Log("Successfully joined channel: " + channel)
-
-	_, err = this.connection.Write([]byte("CAP REQ :twitch.tv/commands\r\n"))
-	if err != nil {
-		this.Logger.Log("Error requesting commands")
-		return err
-	}
 
 	return nil
 }
@@ -107,4 +103,22 @@ func (this *TwitchClient) SendPong() error {
 
 func (this *TwitchClient) ReadLine() (string, error) {
 	return this.reader.ReadLine()
+}
+
+func (this *TwitchClient) WriteMessage(message string, channel string, messageType string, user string) error {
+	command := "PRIVMSG #" + strings.ToLower(channel) + " :"
+	if messageType == "WHISPER" {
+		command += "/w " + user + " "
+	}
+
+	command += message + "\r\n"
+
+	_, err := this.connection.Write([]byte(command))
+
+	if err != nil {
+		this.Logger.Log("Error writing message to channel: " + channel)
+		return err
+	}
+
+	return nil
 }

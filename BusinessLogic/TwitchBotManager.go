@@ -1,6 +1,7 @@
 package BusinessLogic
 
 import (
+	"TwitchChatBot/Configuration"
 	"TwitchChatBot/Logging"
 	"TwitchChatBot/MagicAPI"
 	"TwitchChatBot/TwitchAPI"
@@ -10,7 +11,7 @@ import (
 
 const ping = "PING :tmi.twitch.tv"
 
-var chatMessageRegex *regexp.Regexp = regexp.MustCompile(`^:(\w+)!\w+@\w+\.tmi\.twitch\.tv (PRIVMSG|WHISPER) #*\w+ :!card (.*)?`)
+var chatMessageRegex *regexp.Regexp = regexp.MustCompile(`^:(\w+)!\w+@\w+\.tmi\.twitch\.tv (PRIVMSG|WHISPER) #*(\w+) :!card (.*)?`)
 
 type ITwitchBotManger interface {
 	StartTwitchBot(done chan bool)
@@ -20,6 +21,7 @@ type TwitchBotManager struct {
 	TwitchClient TwitchAPI.ITwitchClient
 	MagicClient  MagicAPI.IMagicClient
 	Logger       Logging.ILogger
+	Settings     *Configuration.Settings
 }
 
 func (this *TwitchBotManager) StartTwitchBot(done chan bool) {
@@ -35,16 +37,20 @@ func (this *TwitchBotManager) StartTwitchBot(done chan bool) {
 		return
 	}
 
-	// TODO: Get from configuration
-	err = this.TwitchClient.Authenticate("magiccardbot", "oauth:b1f8f6mts0e7bxgv4botc6xxtydznz")
+	err = this.TwitchClient.Authenticate(this.Settings.UserName, this.Settings.AuthToken)
 
 	if err != nil {
 		this.Logger.Log("Exiting program")
 		return
 	}
 
-	// TODO: Get channel from configuration
-	err = this.TwitchClient.JoinChannel("crendor")
+	err = this.TwitchClient.JoinChannel(this.Settings.UserName)
+	if err != nil {
+		this.Logger.Log("Exiting program")
+		return
+	}
+
+	err = this.TwitchClient.JoinChannel(this.Settings.Channel)
 
 	if err != nil {
 		this.Logger.Log("Exiting program")
@@ -82,15 +88,26 @@ func (this *TwitchBotManager) monitorChat(chatChannel chan bool) {
 		if matches != nil {
 			user := matches[1]
 			messageType := matches[2]
-			cardName := matches[3]
+			channel := matches[3]
+			cardName := matches[4]
 
-			go this.lookupCardAndPost(cardName, messageType, user)
+			go this.lookupCardAndPost(cardName, messageType, channel, user)
 		}
 
+		this.Logger.Log("Message: " + chatLine)
 		time.Sleep(1 * time.Second)
 	}
 }
 
-func (this *TwitchBotManager) lookupCardAndPost(cardName string, messageType string, user string) {
-	this.Logger.Log("Looking up card " + cardName + " and replying to " + messageType + " and user " + user)
+func (this *TwitchBotManager) lookupCardAndPost(cardName string, messageType string, channel string, user string) {
+
+	this.Logger.Log("Looking up card " + cardName + " and replying to " + messageType + " on channel " + channel + " and user " + user)
+
+	card, err := this.MagicClient.LookupCardInformation(cardName)
+
+	if err != nil {
+		go this.TwitchClient.WriteMessage("Unable to find card "+cardName, channel, messageType, user)
+		return
+	}
+	go this.TwitchClient.WriteMessage(card.String(), channel, messageType, user)
 }

@@ -18,6 +18,7 @@ type ITwitchClient interface {
 	Disconnect()
 	Authenticate(userName string, oauthToken string) error
 	JoinChannel(channel string) error
+	LeaveChannel(channel string) error
 	SendPong() error
 	ReadLine() (string, error)
 	WriteMessage(message string, channel string, messageType string, user string) error
@@ -93,13 +94,33 @@ func (this *twitchClient) Authenticate(userName string, oauthToken string) error
 
 func (this *twitchClient) JoinChannel(channel string) error {
 
-	_, err := this.connection.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n"))
+	var err error = nil
+	this.RateLimiter.PerformInteraction(func() {
+		_, err = this.connection.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n"))
+	})
+
 	if err != nil {
 		this.Logger.Log("Error joining channel: " + channel)
 		return err
 	}
 
 	this.Logger.Log("Successfully joined channel: " + channel)
+
+	return nil
+}
+
+func (this *twitchClient) LeaveChannel(channel string) error {
+	var err error = nil
+	this.RateLimiter.PerformInteraction(func() {
+		_, err = this.connection.Write([]byte("PART #" + strings.ToLower(channel) + "\r\n"))
+	})
+
+	if err != nil {
+		this.Logger.Log("Error leaving channel: " + channel)
+		return err
+	}
+
+	this.Logger.Log("Successfully left channel: " + channel)
 
 	return nil
 }
@@ -145,7 +166,7 @@ func (this *twitchClient) WriteMessage(message string, channel string, messageTy
 		if messageType == "WHISPER" {
 			command += "/w " + user + " "
 		}
-		command += message + "\r\n"
+		command += user + ": " + message + "\r\n"
 
 		_, err = this.connection.Write([]byte(command))
 		if err != nil {

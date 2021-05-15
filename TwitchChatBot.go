@@ -20,7 +20,7 @@ func main() {
 	container := BusinessLogic.NewBusinessLogicContainer(settings, &logger)
 
 	done := make(chan bool)
-	go container.TwitchBotManager.StartTwitchBot(done)
+	go BusinessLogic.RunChatBot(container.ChatBot, done)
 	<-done
 }
 

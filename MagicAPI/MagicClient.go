@@ -38,9 +38,9 @@ func (this *magicClient) LookupCardInformation(cardNameOrId string) (*MagicCard,
 	var result *MagicCard = nil
 	var err error = nil
 	this.RateLimiter.PerformInteraction(func() {
-		cardId, err := strconv.Atoi(cardNameOrId)
+		cardId, conversionErr := strconv.Atoi(cardNameOrId)
 
-		if err == nil {
+		if conversionErr == nil {
 			result, err = this.lookupCardById(fmt.Sprint(cardId))
 		} else {
 			result, err = this.lookupCardByName(cardNameOrId)

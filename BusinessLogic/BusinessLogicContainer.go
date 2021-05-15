@@ -11,12 +11,12 @@ func NewBusinessLogicContainer(settings *Configuration.Settings, logger Logging.
 	container := new(businessLogicContainer)
 	container.TwitchClient = TwitchAPI.NewTwitchClient(settings, logger)
 	container.MagicClient = MagicAPI.NewMagicClient(settings, logger)
-	container.TwitchBotManager = NewTwitchBotManager(container.TwitchClient, container.MagicClient, settings, logger)
+	container.ChatBot = NewChatBot(container.TwitchClient, container.MagicClient, settings, logger)
 	return container
 }
 
 type businessLogicContainer struct {
-	TwitchClient     TwitchAPI.ITwitchClient
-	MagicClient      MagicAPI.IMagicClient
-	TwitchBotManager ITwitchBotManager
+	TwitchClient TwitchAPI.ITwitchClient
+	MagicClient  MagicAPI.IMagicClient
+	ChatBot      IChatBot
 }

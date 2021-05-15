@@ -13,18 +13,27 @@ const ping = "PING :tmi.twitch.tv"
 
 var chatMessageRegex *regexp.Regexp = regexp.MustCompile(`^:(\w+)!\w+@\w+\.tmi\.twitch\.tv (PRIVMSG|WHISPER) #*(\w+) :!card (.*)?`)
 
-type ITwitchBotManger interface {
+type ITwitchBotManager interface {
 	StartTwitchBot(done chan bool)
 }
 
-type TwitchBotManager struct {
-	TwitchClient TwitchAPI.ITwitchClient
-	MagicClient  MagicAPI.IMagicClient
-	Logger       Logging.ILogger
-	Settings     *Configuration.Settings
+func NewTwitchBotManager(twitchClient TwitchAPI.ITwitchClient, magicClient MagicAPI.IMagicClient, settings *Configuration.Settings, logger Logging.ILogger) ITwitchBotManager {
+	manager := new(twitchBotManager)
+	manager.TwitchClient = twitchClient
+	manager.MagicClient = magicClient
+	manager.Settings = settings
+	manager.Logger = logger
+	return manager
 }
 
-func (this *TwitchBotManager) StartTwitchBot(done chan bool) {
+type twitchBotManager struct {
+	TwitchClient TwitchAPI.ITwitchClient
+	MagicClient  MagicAPI.IMagicClient
+	Settings     *Configuration.Settings
+	Logger       Logging.ILogger
+}
+
+func (this *twitchBotManager) StartTwitchBot(done chan bool) {
 	defer func() {
 		this.TwitchClient.Disconnect()
 		done <- true
@@ -64,7 +73,7 @@ func (this *TwitchBotManager) StartTwitchBot(done chan bool) {
 	return
 }
 
-func (this *TwitchBotManager) monitorChat(chatChannel chan bool) {
+func (this *twitchBotManager) monitorChat(chatChannel chan bool) {
 
 	defer func() {
 		chatChannel <- true
@@ -99,7 +108,7 @@ func (this *TwitchBotManager) monitorChat(chatChannel chan bool) {
 	}
 }
 
-func (this *TwitchBotManager) lookupCardAndPost(cardName string, messageType string, channel string, user string) {
+func (this *twitchBotManager) lookupCardAndPost(cardName string, messageType string, channel string, user string) {
 
 	this.Logger.Log("Looking up card " + cardName + " and replying to " + messageType + " on channel " + channel + " and user " + user)
 

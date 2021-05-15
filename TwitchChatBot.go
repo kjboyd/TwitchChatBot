@@ -4,8 +4,6 @@ import (
 	"TwitchChatBot/BusinessLogic"
 	"TwitchChatBot/Configuration"
 	"TwitchChatBot/Logging"
-	"TwitchChatBot/MagicAPI"
-	"TwitchChatBot/TwitchAPI"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -19,24 +17,10 @@ func main() {
 		logger.Log("Failed to read config file. Exiting!")
 	}
 
-	twitchClient := TwitchAPI.TwitchClient{
-		Port:   settings.TwitchPort,
-		Server: settings.TwitchServer,
-		Logger: &logger,
-	}
-	magicClient := MagicAPI.MagicClient{
-		Logger:        &logger,
-		MagicEndpoint: settings.MagicEndpoint,
-	}
+	container := BusinessLogic.NewBusinessLogicContainer(settings, &logger)
 
-	twitchBotManager := BusinessLogic.TwitchBotManager{
-		MagicClient:  &magicClient,
-		TwitchClient: &twitchClient,
-		Logger:       &logger,
-		Settings:     settings,
-	}
 	done := make(chan bool)
-	go twitchBotManager.StartTwitchBot(done)
+	go container.TwitchBotManager.StartTwitchBot(done)
 	<-done
 }
 

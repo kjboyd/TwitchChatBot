@@ -1,6 +1,8 @@
 package TwitchAPI
 
 import (
+	"TwitchChatBot/Configuration"
+	"TwitchChatBot/Infrastructure"
 	"TwitchChatBot/Logging"
 	"bufio"
 	"net"
@@ -20,16 +22,27 @@ type ITwitchClient interface {
 	WriteMessage(message string, channel string, messageType string, user string) error
 }
 
-type TwitchClient struct {
-	Port   string
-	Server string
-	Logger Logging.ILogger
+func NewTwitchClient(settings *Configuration.Settings, logger Logging.ILogger) ITwitchClient {
+	client := new(twitchClient)
+	client.Port = settings.TwitchPort
+	client.Server = settings.TwitchServer
+	client.Logger = logger
+	client.RateLimiter = Infrastructure.NewRateLimiter(
+		settings.TwitchRateLimit, settings.TwitchRateLimitDurationSeconds)
+	return client
+}
+
+type twitchClient struct {
+	Port        string
+	Server      string
+	Logger      Logging.ILogger
+	RateLimiter Infrastructure.IRateLimiter
 
 	connection net.Conn
 	reader     *textproto.Reader
 }
 
-func (this *TwitchClient) ConnectToIrcServer() error {
+func (this *twitchClient) ConnectToIrcServer() error {
 	connectionString := this.Server + ":" + this.Port
 	this.Logger.Log("Connecting to Twitch IRC server at " + connectionString)
 
@@ -46,19 +59,22 @@ func (this *TwitchClient) ConnectToIrcServer() error {
 	return nil
 }
 
-func (this *TwitchClient) Authenticate(userName string, oauthToken string) error {
+func (this *twitchClient) Authenticate(userName string, oauthToken string) error {
+	this.RateLimiter.RecordInteraction()
 	_, err := this.connection.Write([]byte("PASS " + oauthToken + "\r\n"))
 	if err != nil {
 		this.Logger.Log("Error passing oauth token to twitch.")
 		return err
 	}
 
+	this.RateLimiter.RecordInteraction()
 	_, err = this.connection.Write([]byte("NICK " + userName + "\r\n"))
 	if err != nil {
 		this.Logger.Log("Error logging in with user: " + userName)
 		return err
 	}
 
+	this.RateLimiter.RecordInteraction()
 	_, err = this.connection.Write([]byte("CAP REQ :twitch.tv/commands\r\n"))
 	if err != nil {
 		this.Logger.Log("Error requesting commands")
@@ -69,7 +85,8 @@ func (this *TwitchClient) Authenticate(userName string, oauthToken string) error
 	return nil
 }
 
-func (this *TwitchClient) JoinChannel(channel string) error {
+func (this *twitchClient) JoinChannel(channel string) error {
+	this.RateLimiter.RecordInteraction()
 	_, err := this.connection.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n"))
 	if err != nil {
 		this.Logger.Log("Error joining channel: " + channel)
@@ -80,7 +97,7 @@ func (this *TwitchClient) JoinChannel(channel string) error {
 	return nil
 }
 
-func (this *TwitchClient) Disconnect() {
+func (this *twitchClient) Disconnect() {
 	err := this.connection.Close()
 	if err != nil {
 		this.Logger.Log("Error disconnecting from Twitch IRC")
@@ -91,7 +108,7 @@ func (this *TwitchClient) Disconnect() {
 	return
 }
 
-func (this *TwitchClient) SendPong() error {
+func (this *twitchClient) SendPong() error {
 	_, err := this.connection.Write([]byte(pong))
 	if err != nil {
 		this.Logger.Log("Error sending PONG!")
@@ -101,11 +118,19 @@ func (this *TwitchClient) SendPong() error {
 	return nil
 }
 
-func (this *TwitchClient) ReadLine() (string, error) {
+func (this *twitchClient) ReadLine() (string, error) {
 	return this.reader.ReadLine()
 }
 
-func (this *TwitchClient) WriteMessage(message string, channel string, messageType string, user string) error {
+func (this *twitchClient) WriteMessage(message string, channel string, messageType string, user string) error {
+
+	err := this.RateLimiter.SleepUntilInteractionAllowed()
+	if err != nil {
+		this.Logger.Log("Error rate limiting Twitch API messages")
+		return err
+	}
+	this.RateLimiter.RecordInteraction()
+
 	command := "PRIVMSG #" + strings.ToLower(channel) + " :"
 	if messageType == "WHISPER" {
 		command += "/w " + user + " "
@@ -113,7 +138,7 @@ func (this *TwitchClient) WriteMessage(message string, channel string, messageTy
 
 	command += message + "\r\n"
 
-	_, err := this.connection.Write([]byte(command))
+	_, err = this.connection.Write([]byte(command))
 
 	if err != nil {
 		this.Logger.Log("Error writing message to channel: " + channel)

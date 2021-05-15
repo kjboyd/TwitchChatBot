@@ -1,6 +1,8 @@
 package MagicAPI
 
 import (
+	"TwitchChatBot/Configuration"
+	"TwitchChatBot/Infrastructure"
 	"TwitchChatBot/Logging"
 	"encoding/json"
 	"fmt"
@@ -15,12 +17,29 @@ type IMagicClient interface {
 	LookupCardInformation(cardNameOrId string) (*MagicCard, error)
 }
 
-type MagicClient struct {
-	Logger        Logging.ILogger
-	MagicEndpoint string
+func NewMagicClient(settings *Configuration.Settings, logger Logging.ILogger) IMagicClient {
+	client := new(magicClient)
+	client.Logger = logger
+	client.Settings = settings
+	client.RateLimiter = Infrastructure.NewRateLimiter(
+		settings.MagicRateLimit, settings.MagicRateLimitDurationMinutes*60)
+	return client
 }
 
-func (this *MagicClient) LookupCardInformation(cardNameOrId string) (*MagicCard, error) {
+type magicClient struct {
+	Logger      Logging.ILogger
+	Settings    *Configuration.Settings
+	RateLimiter Infrastructure.IRateLimiter
+}
+
+func (this *magicClient) LookupCardInformation(cardNameOrId string) (*MagicCard, error) {
+
+	err := this.RateLimiter.SleepUntilInteractionAllowed()
+	if err != nil {
+		this.Logger.Log("Error limiting magic API rate. Error: " + err.Error())
+		return nil, err
+	}
+	this.RateLimiter.RecordInteraction()
 
 	cardId, err := strconv.Atoi(cardNameOrId)
 
@@ -31,10 +50,10 @@ func (this *MagicClient) LookupCardInformation(cardNameOrId string) (*MagicCard,
 	}
 }
 
-func (this *MagicClient) lookupCardByName(cardName string) (*MagicCard, error) {
+func (this *magicClient) lookupCardByName(cardName string) (*MagicCard, error) {
 	this.Logger.Log("Looking up card by name: " + cardName)
 
-	resp, err := http.Get(this.MagicEndpoint + "cards?name=" + url.QueryEscape(cardName))
+	resp, err := http.Get(this.Settings.MagicEndpoint + "cards?name=" + url.QueryEscape(cardName))
 	if err != nil {
 		this.Logger.Log("Got error when looking up card with name " + cardName + ". Error: " + err.Error())
 		return nil, err
@@ -56,10 +75,10 @@ func (this *MagicClient) lookupCardByName(cardName string) (*MagicCard, error) {
 	return card, nil
 }
 
-func (this *MagicClient) lookupCardById(cardId string) (*MagicCard, error) {
+func (this *magicClient) lookupCardById(cardId string) (*MagicCard, error) {
 	this.Logger.Log("Looking up card by id: " + cardId)
 
-	resp, err := http.Get(this.MagicEndpoint + "cards/" + cardId)
+	resp, err := http.Get(this.Settings.MagicEndpoint + "cards/" + cardId)
 	if err != nil {
 		this.Logger.Log("Got error when looking up card with Id " + cardId + ". Error: " + err.Error())
 		return nil, err
@@ -81,7 +100,7 @@ func (this *MagicClient) lookupCardById(cardId string) (*MagicCard, error) {
 	return card, nil
 }
 
-func (this *MagicClient) decodeCard(body io.Reader) (*MagicCard, error) {
+func (this *magicClient) decodeCard(body io.Reader) (*MagicCard, error) {
 	cardResponse := new(CardResponse)
 	decoder := json.NewDecoder(body)
 	err := decoder.Decode(&cardResponse)

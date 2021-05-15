@@ -37,7 +37,7 @@ func ReadConfig(configPath string) (*Configuration.Settings, error) {
 	// parses the file contents
 	dec := json.NewDecoder(strings.NewReader(string(settingsFile)))
 	err = dec.Decode(settings)
-	if nil != err && io.EOF != err {
+	if err != nil && err != io.EOF {
 		return nil, err
 	}
 

@@ -5,6 +5,7 @@ import (
 	"TwitchChatBot/Infrastructure"
 	"TwitchChatBot/Logging"
 	"testing"
+	"time"
 )
 
 func setupPatient() *magicClient {
@@ -12,10 +13,10 @@ func setupPatient() *magicClient {
 	settings := Configuration.Settings{
 		MagicEndpoint:                 "https://api.magicthegathering.io/v1/",
 		MagicRateLimit:                3,
-		MagicRateLimitDurationMinutes: 2,
+		MagicRateLimitDurationSeconds: 2,
 	}
 	rateLimiter := Infrastructure.NewRateLimiter(
-		settings.MagicRateLimit, settings.MagicRateLimitDurationMinutes*60)
+		settings.MagicRateLimit, time.Duration(settings.MagicRateLimitDurationSeconds)*time.Second)
 	patient := magicClient{Logger: &logger, Settings: &settings, RateLimiter: rateLimiter}
 	return &patient
 }

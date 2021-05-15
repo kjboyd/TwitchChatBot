@@ -1,8 +1,6 @@
 package Infrastructure
 
 import (
-	"container/list"
-	"fmt"
 	"time"
 )
 
@@ -10,57 +8,55 @@ import (
 Ideally I would mock out the clock so that this class could be tested
 */
 type IRateLimiter interface {
-	RecordInteraction()
-	SleepUntilInteractionAllowed() error
+	PerformInteraction(interaction func())
+	ShutDown()
 }
 
-func NewRateLimiter(rateLimit int, durationInSeconds int) IRateLimiter {
+func NewRateLimiter(rateLimit int, duration time.Duration) IRateLimiter {
 	limiter := new(rateLimiter)
-	limiter.RateLimit = rateLimit
-	limiter.DurationInSeconds = durationInSeconds
-	limiter.InteractionRecord = list.New()
+	limiter.duration = duration
+	limiter.requestAvailableChannel = make(chan bool, rateLimit)
+	limiter.requestSentChannel = make(chan time.Time, rateLimit)
+	limiter.endLoopChannel = make(chan bool, 1)
+
+	for i := 0; i < rateLimit; i++ {
+		limiter.requestAvailableChannel <- true
+	}
+	go limiter.run()
+
 	return limiter
 }
 
 type rateLimiter struct {
-	RateLimit         int
-	DurationInSeconds int
-	InteractionRecord *list.List
+	duration                time.Duration
+	requestAvailableChannel chan bool
+	requestSentChannel      chan time.Time
+	endLoopChannel          chan bool
 }
 
-func (this *rateLimiter) RecordInteraction() {
-	this.InteractionRecord.PushFront(time.Now())
+func (this *rateLimiter) PerformInteraction(interaction func()) {
+	<-this.requestAvailableChannel
+	interaction()
+	this.requestSentChannel <- time.Now()
 }
 
-func (this *rateLimiter) SleepUntilInteractionAllowed() error {
+func (this *rateLimiter) ShutDown() {
+	this.endLoopChannel <- true
+}
+
+func (this *rateLimiter) run() {
+
 	for {
-		this.clearOldInteractionRecords()
-
-		if this.InteractionRecord.Len() >= this.RateLimit {
-			callTime, ok := this.InteractionRecord.Back().Value.(time.Time)
-			if !ok {
-				return fmt.Errorf("Unable to parse api call time.")
+		select {
+		case <-this.endLoopChannel:
+			break
+		case requestTime := <-this.requestSentChannel:
+			select {
+			case <-this.endLoopChannel:
+				break
+			case <-time.After(this.duration - time.Since(requestTime)):
+				this.requestAvailableChannel <- true
 			}
-			sleepTime := float64(this.DurationInSeconds) - time.Since(callTime).Seconds()
-			time.Sleep(time.Duration(sleepTime))
-		} else {
-			return nil
 		}
-	}
-}
-
-func (this *rateLimiter) clearOldInteractionRecords() {
-	for {
-		if this.InteractionRecord.Back() == nil {
-			return
-		}
-
-		callTime, ok := this.InteractionRecord.Back().Value.(time.Time)
-		timeSince := time.Since(callTime).Seconds()
-		duration := float64(this.DurationInSeconds)
-		if ok && timeSince < duration {
-			return
-		}
-		this.InteractionRecord.Remove(this.InteractionRecord.Back())
 	}
 }

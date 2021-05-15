@@ -4,7 +4,9 @@ type Settings struct {
 	UserName                       string
 	AuthToken                      string
 	Channel                        string
-	Command                        string
+	CardCommand                    string
+	DisconnectCommand              string
+	ChangeChannelCommand           string
 	TwitchServer                   string
 	TwitchPort                     string
 	TwitchRateLimit                int

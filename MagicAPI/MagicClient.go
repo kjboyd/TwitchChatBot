@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 type IMagicClient interface {
@@ -22,7 +23,7 @@ func NewMagicClient(settings *Configuration.Settings, logger Logging.ILogger) IM
 	client.Logger = logger
 	client.Settings = settings
 	client.RateLimiter = Infrastructure.NewRateLimiter(
-		settings.MagicRateLimit, settings.MagicRateLimitDurationMinutes*60)
+		settings.MagicRateLimit, time.Duration(settings.MagicRateLimitDurationSeconds)*time.Second)
 	return client
 }
 
@@ -34,23 +35,22 @@ type magicClient struct {
 
 func (this *magicClient) LookupCardInformation(cardNameOrId string) (*MagicCard, error) {
 
-	err := this.RateLimiter.SleepUntilInteractionAllowed()
-	if err != nil {
-		this.Logger.Log("Error limiting magic API rate. Error: " + err.Error())
-		return nil, err
-	}
-	this.RateLimiter.RecordInteraction()
+	var result *MagicCard = nil
+	var err error = nil
+	this.RateLimiter.PerformInteraction(func() {
+		cardId, err := strconv.Atoi(cardNameOrId)
 
-	cardId, err := strconv.Atoi(cardNameOrId)
-
-	if err == nil {
-		return this.lookupCardById(fmt.Sprint(cardId))
-	} else {
-		return this.lookupCardByName(cardNameOrId)
-	}
+		if err == nil {
+			result, err = this.lookupCardById(fmt.Sprint(cardId))
+		} else {
+			result, err = this.lookupCardByName(cardNameOrId)
+		}
+	})
+	return result, err
 }
 
 func (this *magicClient) lookupCardByName(cardName string) (*MagicCard, error) {
+
 	this.Logger.Log("Looking up card by name: " + cardName)
 
 	resp, err := http.Get(this.Settings.MagicEndpoint + "cards?name=" + url.QueryEscape(cardName))
@@ -117,6 +117,7 @@ func (this *magicClient) decodeCard(body io.Reader) (*MagicCard, error) {
 		return nil, err
 	}
 
+	// The Magic API can return multiple values for a query, but we are always querying on a single card name
 	if cardResponse.Card != nil {
 		return cardResponse.Card, nil
 	}

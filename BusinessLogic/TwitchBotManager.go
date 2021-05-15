@@ -6,7 +6,6 @@ import (
 	"TwitchChatBot/MagicAPI"
 	"TwitchChatBot/TwitchAPI"
 	"regexp"
-	"time"
 )
 
 const ping = "PING :tmi.twitch.tv"
@@ -39,45 +38,32 @@ func (this *twitchBotManager) StartTwitchBot(done chan bool) {
 		done <- true
 	}()
 
-	err := this.TwitchClient.ConnectToIrcServer()
-
-	if err != nil {
-		this.Logger.Log("Exiting program")
+	if err := this.TwitchClient.ConnectToIrcServer(); err != nil {
+		this.Logger.Log("Failed to connect to irc channel. Error: " + err.Error())
 		return
 	}
 
-	err = this.TwitchClient.Authenticate(this.Settings.UserName, this.Settings.AuthToken)
-
-	if err != nil {
-		this.Logger.Log("Exiting program")
+	if err := this.TwitchClient.Authenticate(this.Settings.UserName, this.Settings.AuthToken); err != nil {
+		this.Logger.Log("Failed to authenticate with Twitch. Error: " + err.Error())
 		return
 	}
 
-	err = this.TwitchClient.JoinChannel(this.Settings.UserName)
-	if err != nil {
-		this.Logger.Log("Exiting program")
+	// This is to be able to receive whispers
+	if err := this.TwitchClient.JoinChannel(this.Settings.UserName); err != nil {
+		this.Logger.Log("Failed to join whispers channel. Error: " + err.Error())
 		return
 	}
 
-	err = this.TwitchClient.JoinChannel(this.Settings.Channel)
-
-	if err != nil {
-		this.Logger.Log("Exiting program")
+	if err := this.TwitchClient.JoinChannel(this.Settings.Channel); err != nil {
+		this.Logger.Log("Failed to join channel. Error: " + err.Error())
 		return
 	}
 
-	chatChannel := make(chan bool)
-	go this.monitorChat(chatChannel)
-	<-chatChannel
-
+	this.monitorChat()
 	return
 }
 
-func (this *twitchBotManager) monitorChat(chatChannel chan bool) {
-
-	defer func() {
-		chatChannel <- true
-	}()
+func (this *twitchBotManager) monitorChat() {
 
 	for {
 		chatLine, err := this.TwitchClient.ReadLine()
@@ -104,7 +90,6 @@ func (this *twitchBotManager) monitorChat(chatChannel chan bool) {
 		}
 
 		this.Logger.Log("Message: " + chatLine)
-		time.Sleep(1 * time.Second)
 	}
 }
 
@@ -118,5 +103,7 @@ func (this *twitchBotManager) lookupCardAndPost(cardName string, messageType str
 		go this.TwitchClient.WriteMessage("Unable to find card "+cardName, channel, messageType, user)
 		return
 	}
+
+	this.Logger.Log("Found card: " + card.String())
 	go this.TwitchClient.WriteMessage(card.String(), channel, messageType, user)
 }

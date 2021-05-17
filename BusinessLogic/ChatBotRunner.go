@@ -1,29 +1,15 @@
 package BusinessLogic
 
-type ITwitchBotManager interface {
-	RunTwitchBot(done chan bool)
-}
-
-func NewTwitchBotManager(twitchChatMonitor ITwitchChatMonitor) ITwitchBotManager {
-	manager := new(twitchBotManager)
-	manager.TwitchChatMonitor = twitchChatMonitor
-	return manager
-}
-
-type twitchBotManager struct {
-	TwitchChatMonitor ITwitchChatMonitor
-}
-
-func (this *twitchBotManager) RunTwitchBot(done chan bool) {
+func RunChatBot(chatBot IChatBot, done chan bool) {
 	defer func() {
-		this.TwitchChatMonitor.DisconnectFromTwitch()
+		chatBot.Disconnect()
 		done <- true
 	}()
 
-	this.TwitchChatMonitor.ConnectToTwitch()
+	chatBot.Connect()
 
 	for running := true; running; {
-		running = this.TwitchChatMonitor.MonitorChat()
+		running = chatBot.ProcessMessage()
 	}
 	return
 }

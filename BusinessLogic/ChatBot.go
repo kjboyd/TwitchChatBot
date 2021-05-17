@@ -2,9 +2,8 @@ package BusinessLogic
 
 import (
 	"TwitchChatBot/Configuration"
-	"TwitchChatBot/Logging"
-	"TwitchChatBot/MagicAPI"
 	"TwitchChatBot/TwitchAPI"
+	"log"
 	"regexp"
 )
 
@@ -18,43 +17,43 @@ type IChatBot interface {
 	ProcessMessage() bool
 }
 
-func NewChatBot(twitchClient TwitchAPI.ITwitchClient, magicClient MagicAPI.IMagicClient, settings *Configuration.Settings, logger Logging.ILogger) *chatBot {
+func NewChatBot(twitchClient TwitchAPI.ITwitchClient,
+	cardLookupService ICardLookupService,
+	settings *Configuration.Settings) IChatBot {
 	bot := new(chatBot)
 	bot.TwitchClient = twitchClient
-	bot.MagicClient = magicClient
+	bot.CardLookupService = cardLookupService
 	bot.Settings = settings
-	bot.Logger = logger
 	bot.CurrentChannel = settings.Channel
 	return bot
 }
 
 type chatBot struct {
-	TwitchClient   TwitchAPI.ITwitchClient
-	MagicClient    MagicAPI.IMagicClient
-	Settings       *Configuration.Settings
-	Logger         Logging.ILogger
-	CurrentChannel string
+	TwitchClient      TwitchAPI.ITwitchClient
+	CardLookupService ICardLookupService
+	Settings          *Configuration.Settings
+	CurrentChannel    string
 }
 
 func (this *chatBot) Connect() error {
 	if err := this.TwitchClient.ConnectToIrcServer(); err != nil {
-		this.Logger.Log("Failed to connect to irc channel. Error: " + err.Error())
+		log.Println("Failed to connect to irc channel. Error: " + err.Error())
 		return err
 	}
 
 	if err := this.TwitchClient.Authenticate(this.Settings.UserName, this.Settings.AuthToken); err != nil {
-		this.Logger.Log("Failed to authenticate with Twitch. Error: " + err.Error())
+		log.Println("Failed to authenticate with Twitch. Error: " + err.Error())
 		return err
 	}
 
 	// This is to be able to receive whispers
 	if err := this.TwitchClient.JoinChannel(this.Settings.UserName); err != nil {
-		this.Logger.Log("Failed to join whispers channel. Error: " + err.Error())
+		log.Println("Failed to join whispers channel. Error: " + err.Error())
 		return err
 	}
 
 	if err := this.TwitchClient.JoinChannel(this.Settings.Channel); err != nil {
-		this.Logger.Log("Failed to join channel. Error: " + err.Error())
+		log.Println("Failed to join channel. Error: " + err.Error())
 		return err
 	}
 
@@ -63,6 +62,7 @@ func (this *chatBot) Connect() error {
 
 func (this *chatBot) Disconnect() {
 	this.TwitchClient.LeaveChannel(this.CurrentChannel)
+	this.TwitchClient.LeaveChannel(this.Settings.UserName)
 	this.TwitchClient.Disconnect()
 }
 
@@ -71,12 +71,12 @@ func (this *chatBot) ProcessMessage() bool {
 	chatLine, err := this.TwitchClient.ReadLine()
 
 	if err != nil {
-		this.Logger.Log("Error reading line from chat. " + err.Error())
+		log.Println("Error reading line from chat. " + err.Error())
 		return false
 	}
 
 	if chatLine == ping {
-		this.Logger.Log("Sending PONG in response to received PING")
+		log.Println("Sending PONG in response to received PING")
 		this.TwitchClient.SendPong()
 		return true
 	}
@@ -94,37 +94,25 @@ func (this *chatBot) ProcessMessage() bool {
 
 		switch command {
 		case this.Settings.CardCommand:
-			go this.lookupCardAndPost(argument, messageType, channel, user)
+			go this.CardLookupService.LookupCardAndPost(
+				argument, messageType, channel, user)
 		case this.Settings.DisconnectCommand:
-			this.Logger.Log("Received command to shutdown!")
-			return false
+			if messageType == TwitchAPI.WhisperMessageType {
+				log.Println("Received command to shutdown!")
+				return false
+			}
 		case this.Settings.ChangeChannelCommand:
-			this.TwitchClient.LeaveChannel(this.CurrentChannel)
-			this.TwitchClient.JoinChannel(argument)
-			this.CurrentChannel = argument
+			if messageType == TwitchAPI.WhisperMessageType {
+				// If we leave our own channel, we won't receive whispers anymore
+				if this.CurrentChannel != this.Settings.UserName {
+					this.TwitchClient.LeaveChannel(this.CurrentChannel)
+				}
+				this.TwitchClient.JoinChannel(argument)
+				this.CurrentChannel = argument
+			}
 		}
 	}
-	//this.Logger.Log("Message: " + chatLine)
+	//log.Println("Message: " + chatLine)
 
 	return true
-}
-
-func (this *chatBot) lookupCardAndPost(cardName string, messageType string, channel string, user string) {
-
-	this.Logger.Log("Looking up card " + cardName + " and replying to " + messageType + " on channel " + channel + " and user " + user)
-
-	if cardName == "" {
-		go this.TwitchClient.WriteMessage("Please specify card name.", channel, messageType, user)
-		return
-	}
-
-	card, err := this.MagicClient.LookupCardInformation(cardName)
-
-	if err != nil {
-		go this.TwitchClient.WriteMessage("Unable to find card "+cardName, channel, messageType, user)
-		return
-	}
-
-	this.Logger.Log("Found card: " + card.String())
-	go this.TwitchClient.WriteMessage(card.String(), channel, messageType, user)
 }

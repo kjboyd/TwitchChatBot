@@ -2,21 +2,22 @@ package BusinessLogic
 
 import (
 	"TwitchChatBot/Configuration"
-	"TwitchChatBot/Logging"
 	"TwitchChatBot/MagicAPI"
 	"TwitchChatBot/TwitchAPI"
 )
 
-func NewBusinessLogicContainer(settings *Configuration.Settings, logger Logging.ILogger) *businessLogicContainer {
+func NewBusinessLogicContainer(settings *Configuration.Settings) *businessLogicContainer {
 	container := new(businessLogicContainer)
-	container.TwitchClient = TwitchAPI.NewTwitchClient(settings, logger)
-	container.MagicClient = MagicAPI.NewMagicClient(settings, logger)
-	container.ChatBot = NewChatBot(container.TwitchClient, container.MagicClient, settings, logger)
+	container.TwitchClient = TwitchAPI.NewTwitchClient(settings)
+	container.MagicClient = MagicAPI.NewMagicClient(settings)
+	container.CardLookupService = NewCardLookupService(container.TwitchClient, container.MagicClient)
+	container.ChatBot = NewChatBot(container.TwitchClient, container.CardLookupService, settings)
 	return container
 }
 
 type businessLogicContainer struct {
-	TwitchClient TwitchAPI.ITwitchClient
-	MagicClient  MagicAPI.IMagicClient
-	ChatBot      IChatBot
+	TwitchClient      TwitchAPI.ITwitchClient
+	MagicClient       MagicAPI.IMagicClient
+	CardLookupService ICardLookupService
+	ChatBot           IChatBot
 }

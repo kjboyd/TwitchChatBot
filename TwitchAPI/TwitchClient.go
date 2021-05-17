@@ -3,15 +3,13 @@ package TwitchAPI
 import (
 	"TwitchChatBot/Configuration"
 	"TwitchChatBot/Infrastructure"
-	"TwitchChatBot/Logging"
 	"bufio"
+	"log"
 	"net"
 	"net/textproto"
 	"strings"
 	"time"
 )
-
-const pong string = "PONG :tmi.twitch.tv\r\n"
 
 type ITwitchClient interface {
 	ConnectToIrcServer() error
@@ -24,11 +22,10 @@ type ITwitchClient interface {
 	WriteMessage(message string, channel string, messageType string, user string) error
 }
 
-func NewTwitchClient(settings *Configuration.Settings, logger Logging.ILogger) ITwitchClient {
+func NewTwitchClient(settings *Configuration.Settings) ITwitchClient {
 	client := new(twitchClient)
 	client.Port = settings.TwitchPort
 	client.Server = settings.TwitchServer
-	client.Logger = logger
 	client.RateLimiter = Infrastructure.NewRateLimiter(
 		settings.TwitchRateLimit, time.Duration(settings.TwitchRateLimitDurationSeconds)*time.Second)
 	return client
@@ -37,7 +34,6 @@ func NewTwitchClient(settings *Configuration.Settings, logger Logging.ILogger) I
 type twitchClient struct {
 	Port        string
 	Server      string
-	Logger      Logging.ILogger
 	RateLimiter Infrastructure.IRateLimiter
 
 	connection net.Conn
@@ -46,16 +42,16 @@ type twitchClient struct {
 
 func (this *twitchClient) ConnectToIrcServer() error {
 	connectionString := this.Server + ":" + this.Port
-	this.Logger.Log("Connecting to Twitch IRC server at " + connectionString)
+	log.Println("Connecting to Twitch IRC server at " + connectionString)
 
 	var err error
 	this.connection, err = net.Dial("tcp", connectionString)
 
 	if err != nil {
-		this.Logger.Log("Failed to connect to Twitch IRC server at " + connectionString)
+		log.Println("Failed to connect to Twitch IRC server at " + connectionString)
 		return err
 	}
-	this.Logger.Log("Successfully connected to Twitch IRC")
+	log.Println("Successfully connected to Twitch IRC")
 
 	this.reader = textproto.NewReader(bufio.NewReader(this.connection))
 	return nil
@@ -68,7 +64,7 @@ func (this *twitchClient) Authenticate(userName string, oauthToken string) error
 		_, err = this.connection.Write([]byte("PASS " + oauthToken + "\r\n"))
 	})
 	if err != nil {
-		this.Logger.Log("Error passing oauth token to twitch.")
+		log.Println("Error passing oauth token to twitch.")
 		return err
 	}
 
@@ -76,7 +72,7 @@ func (this *twitchClient) Authenticate(userName string, oauthToken string) error
 		_, err = this.connection.Write([]byte("NICK " + userName + "\r\n"))
 	})
 	if err != nil {
-		this.Logger.Log("Error logging in with user: " + userName)
+		log.Println("Error logging in with user: " + userName)
 		return err
 	}
 
@@ -84,11 +80,11 @@ func (this *twitchClient) Authenticate(userName string, oauthToken string) error
 		_, err = this.connection.Write([]byte("CAP REQ :twitch.tv/commands\r\n"))
 	})
 	if err != nil {
-		this.Logger.Log("Error requesting commands")
+		log.Println("Error requesting commands")
 		return err
 	}
 
-	this.Logger.Log("Successfully authenticated with user: " + userName)
+	log.Println("Successfully authenticated with user: " + userName)
 	return nil
 }
 
@@ -100,11 +96,11 @@ func (this *twitchClient) JoinChannel(channel string) error {
 	})
 
 	if err != nil {
-		this.Logger.Log("Error joining channel: " + channel)
+		log.Println("Error joining channel: " + channel)
 		return err
 	}
 
-	this.Logger.Log("Successfully joined channel: " + channel)
+	log.Println("Successfully joined channel: " + channel)
 
 	return nil
 }
@@ -116,11 +112,11 @@ func (this *twitchClient) LeaveChannel(channel string) error {
 	})
 
 	if err != nil {
-		this.Logger.Log("Error leaving channel: " + channel)
+		log.Println("Error leaving channel: " + channel)
 		return err
 	}
 
-	this.Logger.Log("Successfully left channel: " + channel)
+	log.Println("Successfully left channel: " + channel)
 
 	return nil
 }
@@ -129,19 +125,19 @@ func (this *twitchClient) Disconnect() {
 
 	err := this.connection.Close()
 	if err != nil {
-		this.Logger.Log("Error disconnecting from Twitch IRC")
+		log.Println("Error disconnecting from Twitch IRC")
 		return
 	}
 
-	this.Logger.Log("Disconnected from Twitch IRC")
+	log.Println("Disconnected from Twitch IRC")
 	return
 }
 
 func (this *twitchClient) SendPong() error {
 
-	_, err := this.connection.Write([]byte(pong))
+	_, err := this.connection.Write([]byte(pongCommand))
 	if err != nil {
-		this.Logger.Log("Error sending PONG!")
+		log.Println("Error sending PONG!")
 		return err
 	}
 
@@ -162,15 +158,15 @@ func (this *twitchClient) WriteMessage(message string, channel string, messageTy
 		message = strings.ReplaceAll(message, "\r", "")
 		message = strings.ReplaceAll(message, "\n", " ")
 
-		command := "PRIVMSG #" + strings.ToLower(channel) + " :"
-		if messageType == "WHISPER" {
+		command := RegularMessageType + " #" + strings.ToLower(channel) + " :"
+		if messageType == WhisperMessageType {
 			command += "/w " + user + " "
 		}
 		command += user + ": " + message + "\r\n"
 
 		_, err = this.connection.Write([]byte(command))
 		if err != nil {
-			this.Logger.Log("Error writing message to channel: " + channel)
+			log.Println("Error writing message to channel: " + channel)
 		}
 	})
 

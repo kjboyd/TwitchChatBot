@@ -3,21 +3,24 @@ package main
 import (
 	"TwitchChatBot/BusinessLogic"
 	"TwitchChatBot/Configuration"
-	"TwitchChatBot/Logging"
 	"encoding/json"
+	"flag"
 	"io"
 	"io/ioutil"
+	"log"
 	"strings"
 )
 
+var configFilename = flag.String("config", "app.config", "Location of the config file.")
+
 func main() {
-	logger := Logging.Logger{}
-	settings, err := ReadConfig("app.config")
+	flag.Parse()
+	settings, err := ReadConfig(*configFilename)
 	if err != nil {
-		logger.Log("Failed to read config file. Exiting!")
+		log.Println("Failed to read config file. Exiting!")
 	}
 
-	container := BusinessLogic.NewBusinessLogicContainer(settings, &logger)
+	container := BusinessLogic.NewBusinessLogicContainer(settings)
 
 	done := make(chan bool)
 	go BusinessLogic.RunChatBot(container.ChatBot, done)

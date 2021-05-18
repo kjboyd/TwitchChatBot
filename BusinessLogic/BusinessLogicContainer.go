@@ -10,7 +10,7 @@ func NewBusinessLogicContainer(settings *Configuration.Settings) *businessLogicC
 	container := new(businessLogicContainer)
 	container.TwitchClient = TwitchAPI.NewTwitchClient(settings)
 	container.MagicClient = MagicAPI.NewMagicClient(settings)
-	container.CardLookupService = NewCardLookupService(container.TwitchClient, container.MagicClient)
+	container.CardLookupService = NewCardLookupService(container.MagicClient)
 	container.ChatBot = NewChatBot(container.TwitchClient, container.CardLookupService, settings)
 	return container
 }

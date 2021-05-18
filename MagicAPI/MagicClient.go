@@ -56,14 +56,14 @@ func (this *magicClient) lookupCardByName(cardName string) (*MagicCard, error) {
 		log.Println("Got error when looking up card with name " + cardName + ". Error: " + err.Error())
 		return nil, err
 	}
-	body := resp.Body
-	defer body.Close()
 
 	if resp.StatusCode != 200 {
 		log.Println("Got response " + fmt.Sprint(resp.StatusCode) + " when looking up card with name " + cardName)
 		return nil, fmt.Errorf("Card not found")
 	}
 
+	body := resp.Body
+	defer body.Close()
 	card, err := this.decodeCard(body)
 	if err != nil {
 		log.Println("Unable to lookup card with name: " + cardName)
@@ -81,14 +81,14 @@ func (this *magicClient) lookupCardById(cardId string) (*MagicCard, error) {
 		log.Println("Got error when looking up card with Id " + cardId + ". Error: " + err.Error())
 		return nil, err
 	}
-	body := resp.Body
-	defer body.Close()
 
 	if resp.StatusCode != 200 {
 		log.Println("Got response " + fmt.Sprint(resp.StatusCode) + " when looking up card with Id " + cardId)
 		return nil, fmt.Errorf("Card not found")
 	}
 
+	body := resp.Body
+	defer body.Close()
 	card, err := this.decodeCard(body)
 	if err != nil {
 		log.Println("Unable to lookup card with Id: " + cardId)

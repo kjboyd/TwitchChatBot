@@ -1,52 +1,60 @@
 package BusinessLogic
 
 import (
+	"TwitchChatBot/BusinessLogic/mock_BusinessLogic"
 	"TwitchChatBot/Configuration"
-	"TwitchChatBot/TwitchAPI"
+	"TwitchChatBot/TwitchAPI/mock_TwitchAPI"
+	"fmt"
 	"testing"
+
+	"github.com/golang/mock/gomock"
 )
 
 type chatBotTestHarness struct {
-	CardLookupService *MockCardLookupService
-	TwitchClient      *TwitchAPI.MockTwitchClient
+	CardLookupService *mock_BusinessLogic.MockICardLookupService
+	TwitchClient      *mock_TwitchAPI.MockITwitchClient
 	Settings          *Configuration.Settings
 	Patient           IChatBot
 }
 
-func setupTestHarness() *chatBotTestHarness {
+func setupTestHarness(test *testing.T) *chatBotTestHarness {
+	ctrl := gomock.NewController(test)
+
 	testHarness := new(chatBotTestHarness)
-	testHarness.CardLookupService = new(MockCardLookupService)
-	testHarness.TwitchClient = new(TwitchAPI.MockTwitchClient)
+	testHarness.CardLookupService = mock_BusinessLogic.NewMockICardLookupService(ctrl)
+	testHarness.TwitchClient = mock_TwitchAPI.NewMockITwitchClient(ctrl)
 	testHarness.Settings = new(Configuration.Settings)
+	testHarness.Settings.UserName = "testUser"
+	testHarness.Settings.AuthToken = "testAuth"
+	testHarness.Settings.Channel = "testChannel"
 	testHarness.Patient = NewChatBot(testHarness.TwitchClient, testHarness.CardLookupService, testHarness.Settings)
 	return testHarness
 }
 
 func Test_WillConnectToTwitchCorrectly(test *testing.T) {
-	testHarness := setupTestHarness()
+	testHarness := setupTestHarness(test)
+
+	testHarness.TwitchClient.EXPECT().ConnectToIrcServer()
+	testHarness.TwitchClient.EXPECT().Authenticate(
+		gomock.Eq(testHarness.Settings.UserName),
+		gomock.Eq(testHarness.Settings.AuthToken))
+	testHarness.TwitchClient.EXPECT().JoinChannel(
+		gomock.Eq(testHarness.Settings.UserName))
+	testHarness.TwitchClient.EXPECT().JoinChannel(
+		gomock.Eq(testHarness.Settings.Channel))
 
 	testHarness.Patient.Connect()
+}
 
-	// In the real world I will use a mocking framework so that I
-	// can test arguments and do these checks as expectations rather
-	// than checking items in a list
-	if len(testHarness.TwitchClient.MethodCalls) != 4 {
-		test.Errorf("Connect to Irc Server was never called.")
-	}
+func Test_WillReturnErrorIfConnectToIrcServerFails(test *testing.T) {
+	testHarness := setupTestHarness(test)
 
-	if testHarness.TwitchClient.MethodCalls[0] != "ConnectToIrcServer" {
-		test.Errorf("Connect to Irc Server was never called.")
-	}
+	testHarness.TwitchClient.EXPECT().ConnectToIrcServer().Return(
+		fmt.Errorf("Error"))
 
-	if testHarness.TwitchClient.MethodCalls[1] != "Authenticate" {
-		test.Errorf("Authenticate was never called.")
-	}
+	err := testHarness.Patient.Connect()
 
-	if testHarness.TwitchClient.MethodCalls[2] != "JoinChannel" {
-		test.Errorf("JoinChannel was never called.")
-	}
-
-	if testHarness.TwitchClient.MethodCalls[3] != "JoinChannel" {
-		test.Errorf("JoinChannel was never called.")
+	if err == nil {
+		test.Errorf("Connect succeeded even though connect to IrcServer Failed")
 	}
 }

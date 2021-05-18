@@ -18,6 +18,7 @@ func main() {
 	settings, err := ReadConfig(*configFilename)
 	if err != nil {
 		log.Println("Failed to read config file. Exiting!")
+		return
 	}
 
 	container := BusinessLogic.NewBusinessLogicContainer(settings)
@@ -31,7 +32,7 @@ func ReadConfig(configPath string) (*Configuration.Settings, error) {
 
 	// reads from the file
 	settingsFile, err := ioutil.ReadFile(configPath)
-	if nil != err {
+	if err != nil {
 		return nil, err
 	}
 

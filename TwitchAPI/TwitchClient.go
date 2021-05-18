@@ -19,7 +19,7 @@ type ITwitchClient interface {
 	LeaveChannel(channel string) error
 	SendPong() error
 	ReadLine() (string, error)
-	WriteMessage(message string, channel string, messageType string, user string) error
+	WriteMessage(message string, channel string, messageType string, user string) (int, error)
 }
 
 func NewTwitchClient(settings *Configuration.Settings) ITwitchClient {
@@ -59,28 +59,18 @@ func (this *twitchClient) ConnectToIrcServer() error {
 
 func (this *twitchClient) Authenticate(userName string, oauthToken string) error {
 
-	var err error = nil
-	this.RateLimiter.PerformInteraction(func() {
-		_, err = this.connection.Write([]byte("PASS " + oauthToken + "\r\n"))
-	})
-	if err != nil {
+	if _, err := this.writeToConnection("PASS " + oauthToken + "\r\n"); err != nil {
 		log.Println("Error passing oauth token to twitch.")
 		return err
 	}
 
-	this.RateLimiter.PerformInteraction(func() {
-		_, err = this.connection.Write([]byte("NICK " + userName + "\r\n"))
-	})
-	if err != nil {
+	if _, err := this.writeToConnection("NICK " + userName + "\r\n"); err != nil {
 		log.Println("Error logging in with user: " + userName)
 		return err
 	}
 
-	this.RateLimiter.PerformInteraction(func() {
-		_, err = this.connection.Write([]byte("CAP REQ :twitch.tv/commands\r\n"))
-	})
-	if err != nil {
-		log.Println("Error requesting commands")
+	if _, err := this.writeToConnection("CAP REQ :twitch.tv/commands\r\n"); err != nil {
+		log.Println("Error requesting Twitch command capabilities")
 		return err
 	}
 
@@ -90,12 +80,7 @@ func (this *twitchClient) Authenticate(userName string, oauthToken string) error
 
 func (this *twitchClient) JoinChannel(channel string) error {
 
-	var err error = nil
-	this.RateLimiter.PerformInteraction(func() {
-		_, err = this.connection.Write([]byte("JOIN #" + strings.ToLower(channel) + "\r\n"))
-	})
-
-	if err != nil {
+	if _, err := this.writeToConnection("JOIN #" + strings.ToLower(channel) + "\r\n"); err != nil {
 		log.Println("Error joining channel: " + channel)
 		return err
 	}
@@ -106,12 +91,8 @@ func (this *twitchClient) JoinChannel(channel string) error {
 }
 
 func (this *twitchClient) LeaveChannel(channel string) error {
-	var err error = nil
-	this.RateLimiter.PerformInteraction(func() {
-		_, err = this.connection.Write([]byte("PART #" + strings.ToLower(channel) + "\r\n"))
-	})
 
-	if err != nil {
+	if _, err := this.writeToConnection("PART #" + strings.ToLower(channel) + "\r\n"); err != nil {
 		log.Println("Error leaving channel: " + channel)
 		return err
 	}
@@ -125,7 +106,7 @@ func (this *twitchClient) Disconnect() {
 
 	err := this.connection.Close()
 	if err != nil {
-		log.Println("Error disconnecting from Twitch IRC")
+		log.Println("Error disconnecting from Twitch IRC. Error: " + err.Error())
 		return
 	}
 
@@ -135,6 +116,7 @@ func (this *twitchClient) Disconnect() {
 
 func (this *twitchClient) SendPong() error {
 
+	// We do not use this.writeToConnection because we do not want our pong's to be rate limited
 	_, err := this.connection.Write([]byte(pongCommand))
 	if err != nil {
 		log.Println("Error sending PONG!")
@@ -148,27 +130,33 @@ func (this *twitchClient) ReadLine() (string, error) {
 	return this.reader.ReadLine()
 }
 
-func (this *twitchClient) WriteMessage(message string, channel string, messageType string, user string) error {
+func (this *twitchClient) WriteMessage(message string, channel string, messageType string, user string) (int, error) {
 
+	// Twitch does not allow for multi-line messages, so we replace any \r\n or \n with a space
+	// to make it look nice in chat
+	message = strings.ReplaceAll(message, "\r", "")
+	message = strings.ReplaceAll(message, "\n", " ")
+
+	command := RegularMessageType + " #" + strings.ToLower(channel) + " :"
+	if messageType == WhisperMessageType {
+		command += "/w " + user + " "
+	}
+	command += user + ": " + message + "\r\n"
+
+	var bytesWritten int
+	if bytesWritten, err := this.writeToConnection(command); err != nil {
+		log.Println("Error writing message to channel: " + channel)
+		return bytesWritten, err
+	}
+
+	return bytesWritten, nil
+}
+
+func (this *twitchClient) writeToConnection(message string) (int, error) {
 	var err error = nil
+	var bytesWritten int
 	this.RateLimiter.PerformInteraction(func() {
-
-		// Twitch does not allow for multi-line messages, so we replace any \r\n or \n with a space
-		// to make it look nice in chat
-		message = strings.ReplaceAll(message, "\r", "")
-		message = strings.ReplaceAll(message, "\n", " ")
-
-		command := RegularMessageType + " #" + strings.ToLower(channel) + " :"
-		if messageType == WhisperMessageType {
-			command += "/w " + user + " "
-		}
-		command += user + ": " + message + "\r\n"
-
-		_, err = this.connection.Write([]byte(command))
-		if err != nil {
-			log.Println("Error writing message to channel: " + channel)
-		}
+		bytesWritten, err = this.connection.Write([]byte(message))
 	})
-
-	return err
+	return bytesWritten, err
 }

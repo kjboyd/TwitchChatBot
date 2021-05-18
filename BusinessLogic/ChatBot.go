@@ -7,8 +7,9 @@ import (
 	"regexp"
 )
 
-const ping = "PING :tmi.twitch.tv"
-
+// Example messages that we receive:
+// :angelzwrath11!angelzwrath11@angelzwrath11.tmi.twitch.tv PRIVMSG #channelName :!card academic probation
+// :angelzwrath11!angelzwrath11@angelzwrath11.tmi.twitch.tv WHISPER magiccardbot :!card BoneCrusher Giant
 var chatMessageRegex *regexp.Regexp = regexp.MustCompile(`^:(\w+)!\w+@\w+\.tmi\.twitch\.tv (PRIVMSG|WHISPER) #*(\w+) :!(\w+) *(.*)?`)
 
 type IChatBot interface {
@@ -75,14 +76,14 @@ func (this *chatBot) ProcessMessage() bool {
 		return false
 	}
 
-	if chatLine == ping {
+	if chatLine == TwitchAPI.Ping {
 		log.Println("Sending PONG in response to received PING")
 		this.TwitchClient.SendPong()
 		return true
 	}
 
 	matches := chatMessageRegex.FindStringSubmatch(chatLine)
-	if matches != nil {
+	if matches != nil && len(matches) >= 4 {
 		user := matches[1]
 		messageType := matches[2]
 		channel := matches[3]
@@ -94,20 +95,25 @@ func (this *chatBot) ProcessMessage() bool {
 
 		switch command {
 		case this.Settings.CardCommand:
+			log.Println("Looking up card " + argument + " and replying to " + messageType + " on channel " + channel + " for user " + user)
 			go this.CardLookupService.LookupCardAndPost(
-				argument, messageType, channel, user)
+				argument, NewTwitchWriter(this.TwitchClient, messageType, channel, user))
 		case this.Settings.DisconnectCommand:
+			// We only accept disconnect commands via whispers
 			if messageType == TwitchAPI.WhisperMessageType {
 				log.Println("Received command to shutdown!")
 				return false
 			}
 		case this.Settings.ChangeChannelCommand:
+			// We only accept change channel commands via whispers
 			if messageType == TwitchAPI.WhisperMessageType {
 				// If we leave our own channel, we won't receive whispers anymore
 				if this.CurrentChannel != this.Settings.UserName {
 					this.TwitchClient.LeaveChannel(this.CurrentChannel)
 				}
-				this.TwitchClient.JoinChannel(argument)
+				if argument != this.Settings.UserName {
+					this.TwitchClient.JoinChannel(argument)
+				}
 				this.CurrentChannel = argument
 			}
 		}

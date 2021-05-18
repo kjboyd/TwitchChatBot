@@ -6,7 +6,10 @@ func RunChatBot(chatBot IChatBot, done chan bool) {
 		done <- true
 	}()
 
-	chatBot.Connect()
+	err := chatBot.Connect()
+	if err != nil {
+		return
+	}
 
 	for running := true; running; {
 		running = chatBot.ProcessMessage()

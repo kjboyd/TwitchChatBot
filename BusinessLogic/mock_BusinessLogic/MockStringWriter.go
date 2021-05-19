@@ -6,16 +6,14 @@ package mock_BusinessLogic
 
 import (
 	reflect "reflect"
-	"sync"
 
 	gomock "github.com/golang/mock/gomock"
 )
 
 // MockStringWriter is a mock of StringWriter interface.
 type MockStringWriter struct {
-	ctrl      *gomock.Controller
-	recorder  *MockStringWriterMockRecorder
-	WaitGroup sync.WaitGroup
+	ctrl     *gomock.Controller
+	recorder *MockStringWriterMockRecorder
 }
 
 // MockStringWriterMockRecorder is the mock recorder for MockStringWriter.
@@ -37,7 +35,6 @@ func (m *MockStringWriter) EXPECT() *MockStringWriterMockRecorder {
 
 // WriteString mocks base method.
 func (m *MockStringWriter) WriteString(s string) (int, error) {
-	defer m.WaitGroup.Done()
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WriteString", s)
 	ret0, _ := ret[0].(int)

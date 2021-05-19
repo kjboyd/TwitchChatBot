@@ -5,6 +5,7 @@ import (
 	"TwitchChatBot/MagicAPI"
 	"TwitchChatBot/MagicAPI/mock_MagicAPI"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -31,24 +32,38 @@ func Test_WillNotLookupCardIfCardNameIsBlank(test *testing.T) {
 	testHarness := setupCardLookupServiceTestHarness(test)
 	defer testHarness.MockController.Finish()
 
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(1)
 	testHarness.MagicClient.EXPECT().LookupCardInformation(
 		gomock.Any()).Times(0)
-	testHarness.Writer.EXPECT().WriteString(gomock.Any())
+	testHarness.Writer.EXPECT().WriteString(gomock.Any()).Do(
+		func(message string) {
+			defer waitGroup.Done()
+		},
+	)
 
-	testHarness.Writer.WaitGroup.Add(1)
 	testHarness.Patient.LookupCardAndPost("", testHarness.Writer)
-	testHarness.Writer.WaitGroup.Wait()
+	waitGroup.Wait()
 }
 
 func Test_WillInformUserWhenCardNameIsBlank(test *testing.T) {
 	testHarness := setupCardLookupServiceTestHarness(test)
 	defer testHarness.MockController.Finish()
 
-	testHarness.Writer.EXPECT().WriteString("Please specify card name.")
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(1)
+	testHarness.Writer.EXPECT().WriteString(gomock.Any()).Do(
+		func(message string) {
+			defer waitGroup.Done()
 
-	testHarness.Writer.WaitGroup.Add(1)
+			if message != "Please specify card name." {
+				test.Errorf("Writing incorrect message to chat")
+			}
+		},
+	)
+
 	testHarness.Patient.LookupCardAndPost("", testHarness.Writer)
-	testHarness.Writer.WaitGroup.Wait()
+	waitGroup.Wait()
 }
 
 func Test_WillLookupCardInformationWhenCardNameNotBlank(test *testing.T) {
@@ -57,13 +72,23 @@ func Test_WillLookupCardInformationWhenCardNameNotBlank(test *testing.T) {
 
 	cardName := "Bonecrusher Giant"
 	expectedCard := anonymousMagicCard()
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(1)
+
 	testHarness.MagicClient.EXPECT().LookupCardInformation(
 		gomock.Eq(cardName)).Times(1).Return(expectedCard, nil)
-	testHarness.Writer.EXPECT().WriteString(expectedCard.String())
+	testHarness.Writer.EXPECT().WriteString(gomock.Any()).Do(
+		func(actualMessage string) {
+			defer waitGroup.Done()
 
-	testHarness.Writer.WaitGroup.Add(1)
+			if actualMessage != expectedCard.String() {
+				test.Errorf("Sent wrong message to chat. Got: %s, expected: %s", actualMessage, expectedCard.String())
+			}
+		},
+	)
+
 	testHarness.Patient.LookupCardAndPost(cardName, testHarness.Writer)
-	testHarness.Writer.WaitGroup.Wait()
+	waitGroup.Wait()
 }
 
 func Test_WillInformUserIfCardCannotBeFound(test *testing.T) {
@@ -71,13 +96,24 @@ func Test_WillInformUserIfCardCannotBeFound(test *testing.T) {
 	defer testHarness.MockController.Finish()
 
 	cardName := "Bonecrusher Giant"
+	expectedMessage := "Unable to find card " + cardName
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(1)
+
 	testHarness.MagicClient.EXPECT().LookupCardInformation(
 		gomock.Eq(cardName)).Times(1).Return(nil, fmt.Errorf("Error"))
-	testHarness.Writer.EXPECT().WriteString("Unable to find card " + cardName)
+	testHarness.Writer.EXPECT().WriteString(gomock.Any()).Do(
+		func(actualMessage string) {
+			defer waitGroup.Done()
 
-	testHarness.Writer.WaitGroup.Add(1)
+			if actualMessage != expectedMessage {
+				test.Errorf("Sent wrong message to chat. Got: %s, expected: %s", actualMessage, expectedMessage)
+			}
+		},
+	)
+
 	testHarness.Patient.LookupCardAndPost(cardName, testHarness.Writer)
-	testHarness.Writer.WaitGroup.Wait()
+	waitGroup.Wait()
 }
 
 func anonymousMagicCard() *MagicAPI.MagicCard {

@@ -2,21 +2,17 @@ package MagicAPI
 
 import (
 	"TwitchChatBot/Configuration"
-	"TwitchChatBot/Infrastructure"
 	"testing"
-	"time"
 )
 
-func setupPatient() *magicClient {
+func setupPatient() IMagicClient {
 	settings := Configuration.Settings{
 		MagicEndpoint:                 "https://api.magicthegathering.io/v1/",
 		MagicRateLimit:                3,
 		MagicRateLimitDurationSeconds: 2,
 	}
-	rateLimiter := Infrastructure.NewRateLimiter(
-		settings.MagicRateLimit, time.Duration(settings.MagicRateLimitDurationSeconds)*time.Second)
-	patient := magicClient{Settings: &settings, RateLimiter: rateLimiter}
-	return &patient
+	patient := NewMagicClient(&settings)
+	return patient
 }
 
 func Test_WillLookupCardInformationById(test *testing.T) {
@@ -50,14 +46,26 @@ func Test_WillLookupCardInformationByName(test *testing.T) {
 	}
 }
 
-func Test_WillReturnErrorWhenLookingUpNonExistentCard(test *testing.T) {
+func Test_WillReturnErrorWhenLookingUpNonExistentCardName(test *testing.T) {
 	patient := setupPatient()
 
 	cardName := "Batman"
 	_, err := patient.LookupCardInformation(cardName)
 
 	if err == nil {
-		test.Errorf("Error not returned when looking up invalid card.")
+		test.Errorf("Error not returned when looking up invalid card name.")
+		return
+	}
+}
+
+func Test_WillReturnErrorWhenLookingUpNonExistentMultiverseId(test *testing.T) {
+	patient := setupPatient()
+
+	multiverseId := "0"
+	_, err := patient.LookupCardInformation(multiverseId)
+
+	if err == nil {
+		test.Errorf("Error not returned when looking up invalid multiverse Id.")
 		return
 	}
 }

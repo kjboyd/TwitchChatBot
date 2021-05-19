@@ -30,7 +30,7 @@ func (this *cardLookupService) LookupCardAndPost(
 
 	card, err := this.MagicClient.LookupCardInformation(cardName)
 
-	if err != nil {
+	if err != nil || card == nil {
 		go writer.WriteString("Unable to find card " + cardName)
 		return
 	}

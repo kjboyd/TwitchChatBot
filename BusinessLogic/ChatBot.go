@@ -78,7 +78,7 @@ func (this *chatBot) ProcessMessage() bool {
 
 	if chatLine == TwitchAPI.Ping {
 		log.Println("Sending PONG in response to received PING")
-		this.TwitchClient.SendPong()
+		go this.TwitchClient.SendPong()
 		return true
 	}
 
@@ -109,16 +109,17 @@ func (this *chatBot) ProcessMessage() bool {
 			if messageType == TwitchAPI.WhisperMessageType {
 				// If we leave our own channel, we won't receive whispers anymore
 				if this.CurrentChannel != this.Settings.UserName {
-					this.TwitchClient.LeaveChannel(this.CurrentChannel)
+					go this.TwitchClient.LeaveChannel(this.CurrentChannel)
 				}
 				if argument != this.Settings.UserName {
-					this.TwitchClient.JoinChannel(argument)
+					go this.TwitchClient.JoinChannel(argument)
 				}
 				this.CurrentChannel = argument
 			}
 		}
 	}
-	//log.Println("Message: " + chatLine)
+	// Debug message to see everything that we receive from Twitch
+	// log.Println("Message: " + chatLine)
 
 	return true
 }

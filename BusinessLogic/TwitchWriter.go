@@ -19,6 +19,6 @@ type twitchWriter struct {
 	user         string
 }
 
-func (this *twitchWriter) WriteString(str string) (n int, err error) {
-	this.twitchClient.WriteMessage(str, this.channel, this.messageType, this.user)
+func (this *twitchWriter) WriteString(str string) (int, error) {
+	return this.twitchClient.WriteMessage(str, this.channel, this.messageType, this.user)
 }

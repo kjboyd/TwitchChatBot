@@ -27,7 +27,7 @@ func NewTwitchClient(settings *Configuration.Settings) ITwitchClient {
 	client.Port = settings.TwitchPort
 	client.Server = settings.TwitchServer
 	client.RateLimiter = Infrastructure.NewRateLimiter(
-		settings.TwitchRateLimit, time.Duration(settings.TwitchRateLimitDurationSeconds)*time.Second)
+		settings.TwitchRateLimit, time.Duration(settings.TwitchRateLimitDurationSeconds)*time.Second, Infrastructure.NewTime())
 	return client
 }
 

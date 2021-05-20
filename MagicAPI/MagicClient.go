@@ -22,7 +22,7 @@ func NewMagicClient(settings *Configuration.Settings) IMagicClient {
 	client := new(magicClient)
 	client.Settings = settings
 	client.RateLimiter = Infrastructure.NewRateLimiter(
-		settings.MagicRateLimit, time.Duration(settings.MagicRateLimitDurationSeconds)*time.Second)
+		settings.MagicRateLimit, time.Duration(settings.MagicRateLimitDurationSeconds)*time.Second, Infrastructure.NewTime())
 	return client
 }
 

@@ -12,9 +12,10 @@ type IRateLimiter interface {
 	ShutDown()
 }
 
-func NewRateLimiter(rateLimit int, duration time.Duration) IRateLimiter {
+func NewRateLimiter(rateLimit int, duration time.Duration, timeObject ITime) IRateLimiter {
 	limiter := new(rateLimiter)
 	limiter.duration = duration
+	limiter.timeObject = timeObject
 	limiter.interactionAvailableChannel = make(chan bool, rateLimit)
 	limiter.interactionPerformedChannel = make(chan time.Time, rateLimit)
 	limiter.endLoopChannel = make(chan bool, 1)
@@ -32,16 +33,20 @@ type rateLimiter struct {
 	interactionAvailableChannel chan bool
 	interactionPerformedChannel chan time.Time
 	endLoopChannel              chan bool
+	timeObject                  ITime
 }
 
 func (this *rateLimiter) PerformInteraction(interaction func()) {
 	<-this.interactionAvailableChannel
 	interaction()
-	this.interactionPerformedChannel <- time.Now()
+	this.interactionPerformedChannel <- this.timeObject.Now()
 }
 
 func (this *rateLimiter) ShutDown() {
 	this.endLoopChannel <- true
+	for len(this.interactionAvailableChannel) != 0 {
+		<-this.interactionAvailableChannel
+	}
 }
 
 func (this *rateLimiter) run() {
@@ -49,12 +54,12 @@ func (this *rateLimiter) run() {
 	for {
 		select {
 		case <-this.endLoopChannel:
-			break
+			return
 		case requestTime := <-this.interactionPerformedChannel:
 			select {
 			case <-this.endLoopChannel:
-				break
-			case <-time.After(this.duration - time.Since(requestTime)):
+				return
+			case <-this.timeObject.After(this.duration - this.timeObject.Since(requestTime)):
 				this.interactionAvailableChannel <- true
 			}
 		}

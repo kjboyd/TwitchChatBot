@@ -119,7 +119,9 @@ func (this *chatBot) ProcessMessage() bool {
 		}
 	}
 	// Debug message to see everything that we receive from Twitch
-	// log.Println("Message: " + chatLine)
+	if this.Settings.VerboseMode {
+		log.Println("Message: " + chatLine)
+	}
 
 	return true
 }

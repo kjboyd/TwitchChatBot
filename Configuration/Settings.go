@@ -18,4 +18,5 @@ type Settings struct {
 	MagicEndpoint                  string
 	MagicRateLimit                 int
 	MagicRateLimitDurationSeconds  int
+	VerboseMode                    bool
 }
